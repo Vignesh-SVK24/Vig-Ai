@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>ViG — Multi-Model AI Companion (GPT-4o, Claude 3.5, Gemini)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --warm-beige: #E8DCC8;
+            --light-cream: #F4EBDD;
+            --soft-sand: #D8C4A8;
+            --shadow-beige: #B8A58D;
+
+            --dark-teal-base: #072421;
+            --dark-teal-surface: #0D3834;
+            --dark-teal-card: #134742;
+
+            --glowing-teal: #00D2B4;
+            --electric-teal: #1DE9B6;
+
+            --dark-espresso: #2A241E;
+            --warm-brown: #6B5A4B;
+            --muted-red: #D32F2F;
+
+            --font-main: 'Plus Jakarta Sans', -apple-system, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--warm-beige);
+            color: var(--dark-espresso);
+            font-family: var(--font-main);
+            height: 100vh;
+            height: 100dvh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 440px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background: var(--warm-beige);
+            overflow: hidden;
+        }
+
+        @media (min-width: 480px) {
+            .app-container {
+                height: 92vh;
+                border-radius: 38px;
+                border: 3px solid rgba(0, 210, 180, 0.3);
+                box-shadow: 15px 15px 35px var(--shadow-beige), 0 0 25px rgba(0, 210, 180, 0.2);
+            }
+        }
+
+        /* Header */
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px 10px;
+            z-index: 10;
+        }
+
+        .brand-logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 800;
+            font-size: 1.35rem;
+            color: var(--dark-espresso);
+        }
+        .brand-logo .dot {
+            width: 10px;
+            height: 10px;
+            background: var(--glowing-teal);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--glowing-teal);
+        }
+
+        .nav-btn {
+            background: var(--light-cream);
+            border: 2px solid var(--shadow-beige);
+            color: var(--dark-espresso);
+            padding: 8px 16px;
+            border-radius: 16px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 4px 4px 8px var(--shadow-beige);
+            transition: all 0.2s;
+        }
+        .nav-btn:active { transform: scale(0.95); }
+
+        .screen-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .screen {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            padding: 16px 20px 24px;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.4s ease;
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.96) translateY(15px);
+            overflow-y: auto;
+        }
+        .screen.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1) translateY(0);
+        }
+
+        /* 1. HOME SCREEN */
+        .greeting-section { margin-top: 15px; margin-bottom: 25px; }
+        .greeting-title { font-size: 2.1rem; font-weight: 800; color: var(--dark-espresso); letter-spacing: -0.5px; }
+        .greeting-sub { font-size: 1rem; color: var(--warm-brown); font-weight: 500; margin-top: 4px; }
+
+        .main-command-card {
+            background: var(--dark-teal-surface);
+            border: 2px solid var(--glowing-teal);
+            border-radius: 28px;
+            padding: 35px 24px;
+            text-align: center;
+            cursor: pointer;
+            box-shadow: 0 15px 30px rgba(7, 36, 33, 0.4), 0 0 20px rgba(0, 210, 180, 0.2);
+            transition: transform 0.2s;
+        }
+        .main-command-card:active { transform: scale(0.97); }
+
+        .command-prompt-text {
+            font-size: 1.4rem; font-weight: 800; color: var(--glowing-teal);
+            text-shadow: 0 0 12px rgba(0, 210, 180, 0.5);
+            letter-spacing: 0.5px;
+        }
+        .command-hint { font-size: 0.85rem; color: var(--light-cream); opacity: 0.8; margin-top: 6px; font-weight: 500; }
+
+        .section-header { font-size: 0.82rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: var(--warm-brown); margin: 30px 0 14px; }
+        .chip-container { display: flex; flex-wrap: wrap; gap: 12px; }
+        
+        .teal-chip {
+            background: var(--light-cream);
+            border: 1.5px solid var(--shadow-beige);
+            padding: 12px 20px;
+            border-radius: 20px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--dark-espresso);
+            cursor: pointer;
+            box-shadow: 5px 5px 12px var(--shadow-beige);
+            transition: all 0.2s;
+        }
+        .teal-chip:active { transform: scale(0.94); border-color: var(--glowing-teal); color: var(--dark-teal-surface); }
+
+        .fab-mic {
+            position: absolute;
+            bottom: 24px;
+            right: 24px;
+            width: 68px;
+            height: 68px;
+            border-radius: 50%;
+            background: var(--dark-teal-surface);
+            border: 2px solid var(--glowing-teal);
+            box-shadow: 0 0 25px rgba(0, 210, 180, 0.5), 8px 8px 18px var(--shadow-beige);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            color: var(--glowing-teal);
+            cursor: pointer;
+            z-index: 20;
+            transition: all 0.2s;
+            animation: pulse-teal-fab 2.5s infinite ease-in-out;
+        }
+        .fab-mic:active { transform: scale(0.9); }
+
+        @keyframes pulse-teal-fab {
+            0% { box-shadow: 0 0 15px rgba(0, 210, 180, 0.3); }
+            50% { box-shadow: 0 0 30px rgba(0, 210, 180, 0.8); }
+            100% { box-shadow: 0 0 15px rgba(0, 210, 180, 0.3); }
+        }
+
+        /* 2. AGENT SCREEN */
+        .agent-view { display: flex; flex-direction: column; height: 100%; gap: 14px; }
+
+        .core-display-area {
+            display: flex; flex-direction: column; align-items: center;
+            background: var(--dark-teal-surface);
+            border: 2px solid var(--glowing-teal);
+            border-radius: 28px;
+            padding: 20px 0 16px;
+            box-shadow: 0 10px 25px rgba(7, 36, 33, 0.5), 0 0 20px rgba(0, 210, 180, 0.2);
+        }
+
+        .core-teal-wrap {
+            width: 140px; height: 140px;
+            position: relative;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 50%;
+            background: var(--dark-teal-base);
+            box-shadow: 0 0 20px rgba(0, 210, 180, 0.3);
+            padding: 10px;
+        }
+
+        .core-teal-orb {
+            width: 75px; height: 75px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 35%, var(--electric-teal) 0%, var(--glowing-teal) 50%, var(--dark-teal-base) 100%);
+            box-shadow: 0 0 30px var(--glowing-teal);
+            transition: all 0.4s ease;
+        }
+
+        .state-listening .core-teal-orb { animation: pulse-teal-orb 0.35s infinite alternate; }
+        .state-speaking .core-teal-orb { animation: pulse-teal-orb 0.45s infinite alternate; }
+        .state-thinking .core-teal-orb { animation: pulse-teal-orb 0.7s infinite alternate; }
+
+        @keyframes pulse-teal-orb { 0% { transform: scale(0.9); filter: brightness(1); } 100% { transform: scale(1.15); filter: brightness(1.4); } }
+
+        .status-badge {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            font-weight: 800;
+            color: var(--glowing-teal);
+        }
+
+        .conversation-area {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 4px;
+        }
+
+        .chat-bubble {
+            padding: 14px 18px;
+            border-radius: 22px;
+            font-size: 0.95rem;
+            line-height: 1.55;
+            max-width: 90%;
+            animation: fadeIn 0.3s ease;
+            user-select: text;
+        }
+
+        .chat-bubble.user {
+            align-self: flex-end;
+            background: var(--dark-teal-surface);
+            border: 1.5px solid var(--glowing-teal);
+            color: var(--glowing-teal);
+            font-weight: 600;
+            box-shadow: 0 5px 15px rgba(7, 36, 33, 0.4);
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-bubble.assistant {
+            align-self: flex-start;
+            background: var(--light-cream);
+            border: 2px solid var(--shadow-beige);
+            color: var(--dark-espresso);
+            font-weight: 500;
+            box-shadow: 4px 4px 12px var(--shadow-beige);
+            border-bottom-left-radius: 4px;
+            white-space: pre-wrap;
+        }
+
+        .voice-suggestion-bar {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            scrollbar-width: none;
+        }
+        .voice-suggestion-bar::-webkit-scrollbar { display: none; }
+
+        .voice-pill {
+            background: var(--light-cream);
+            border: 1.5px solid var(--shadow-beige);
+            color: var(--dark-espresso);
+            padding: 8px 16px;
+            border-radius: 16px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            white-space: nowrap;
+            cursor: pointer;
+            box-shadow: 3px 3px 6px var(--shadow-beige);
+            flex-shrink: 0;
+        }
+        .voice-pill:active { transform: scale(0.95); border-color: var(--glowing-teal); }
+
+        .teal-input-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--light-cream);
+            border: 2px solid var(--shadow-beige);
+            padding: 10px 14px;
+            border-radius: 24px;
+            box-shadow: 6px 6px 14px var(--shadow-beige);
+        }
+
+        .mic-button {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--dark-teal-surface);
+            border: 2px solid var(--glowing-teal);
+            color: var(--glowing-teal);
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(0, 210, 180, 0.4);
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+        .mic-button:active, .mic-button.listening {
+            transform: scale(0.92);
+            background: var(--muted-red);
+            border-color: #FF8A80;
+            color: #FFF;
+            box-shadow: 0 0 20px var(--muted-red);
+        }
+
+        .chat-input {
+            flex: 1;
+            background: var(--soft-sand);
+            border: 1.5px solid var(--shadow-beige);
+            color: var(--dark-espresso);
+            font-family: var(--font-main);
+            font-size: 0.9rem;
+            font-weight: 600;
+            padding: 12px 16px;
+            border-radius: 16px;
+            outline: none;
+        }
+        .chat-input::placeholder { color: var(--warm-brown); opacity: 0.7; }
+
+        .btn-send {
+            background: var(--dark-teal-surface);
+            color: var(--glowing-teal);
+            border: 1.5px solid var(--glowing-teal);
+            padding: 12px 18px;
+            border-radius: 16px;
+            font-weight: 800;
+            font-size: 0.85rem;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 210, 180, 0.3);
+        }
+        .btn-send:active { transform: scale(0.95); }
+
+        .settings-screen { gap: 16px; }
+        .text-field {
+            width: 100%;
+            background: var(--dark-teal-base);
+            border: 1.5px solid var(--glowing-teal);
+            border-radius: 16px;
+            padding: 12px 14px;
+            color: var(--light-cream);
+            font-family: var(--font-main);
+            font-weight: 600;
+            font-size: 0.88rem;
+            outline: none;
+        }
+
+        .provider-selector {
+            display: flex; gap: 8px; margin-bottom: 12px;
+        }
+
+        .provider-btn {
+            flex: 1;
+            padding: 10px 8px;
+            border-radius: 12px;
+            background: var(--dark-teal-base);
+            border: 1.5px solid transparent;
+            color: var(--light-cream);
+            font-weight: 700;
+            font-size: 0.75rem;
+            cursor: pointer;
+            text-align: center;
+        }
+        .provider-btn.active {
+            background: var(--glowing-teal);
+            color: var(--dark-teal-base);
+            border-color: #FFF;
+        }
+
+        .bottom-nav {
+            display: flex; justify-content: space-around; align-items: center;
+            background: var(--light-cream);
+            border-top: 2px solid var(--shadow-beige);
+            padding: 12px 0 16px;
+            box-shadow: 0 -6px 14px var(--shadow-beige);
+            z-index: 10;
+        }
+
+        .tab-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--warm-brown); opacity: 0.65; font-size: 0.72rem; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; }
+        .tab-item.active { opacity: 1; color: var(--dark-teal-surface); font-weight: 900; }
+        .tab-icon { font-size: 1.15rem; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="app-container" id="app-container">
+    <!-- Header -->
+    <div class="app-header">
+        <div class="brand-logo"><div class="dot"></div><span>ViG</span></div>
+        <button class="nav-btn" id="btn-header-action" onclick="showScreen('settings')">Settings</button>
+    </div>
+
+    <!-- Screens -->
+    <div class="screen-container">
+        
+        <!-- 1. HOME SCREEN -->
+        <div class="screen active" id="screen-home">
+            <div class="greeting-section">
+                <div class="greeting-title">Good evening, Vignesh</div>
+                <div class="greeting-sub">What would you like me to do?</div>
+            </div>
+
+            <div class="main-command-card" onclick="openAgent('')">
+                <div class="command-prompt-text">Ask ViG anything...</div>
+                <div class="command-hint">Your Personal Intelligence Companion</div>
+            </div>
+
+            <div class="section-header">QUICK SHORTCUTS</div>
+            <div class="chip-container">
+                <div class="teal-chip" onclick="speakCommandPreset('Plan my study schedule for tonight')">🗓️ Plan My Day</div>
+                <div class="teal-chip" onclick="speakCommandPreset('Find my AI assignment PDF and summarize it')">📄 Read PDF</div>
+                <div class="teal-chip" onclick="speakCommandPreset('Search the web for Quantum Computing updates')">🌐 Search Web</div>
+                <div class="teal-chip" onclick="speakCommandPreset('Explain entropy in simple words')">🧠 Explain Topic</div>
+            </div>
+
+            <div class="fab-mic" onclick="startVoiceHome()" title="Speak to ViG">
+                🎤
+            </div>
+        </div>
+
+        <!-- 2. AGENT SCREEN -->
+        <div class="screen" id="screen-agent">
+            <div class="agent-view">
+                
+                <div class="core-display-area" id="core-wrap">
+                    <div class="core-teal-wrap">
+                        <div class="core-teal-orb"></div>
+                    </div>
+                    <div class="status-badge" id="agent-status-text">Ready</div>
+                </div>
+
+                <div class="conversation-area" id="conversation-area">
+                    <div class="chat-bubble assistant">
+                        Hello Vignesh. Tap the microphone or speak a command and I'll take care of it.
+                    </div>
+                </div>
+
+                <div class="voice-suggestion-bar">
+                    <div class="voice-pill" onclick="speakCommandPreset('Explain entropy')">"Explain entropy"</div>
+                    <div class="voice-pill" onclick="speakCommandPreset('Plan my study session')">"Plan study session"</div>
+                    <div class="voice-pill" onclick="speakCommandPreset('Read my AI assignment PDF')">"Read my PDF"</div>
+                    <div class="voice-pill" onclick="speakCommandPreset('Open YouTube')">"Open YouTube"</div>
+                </div>
+
+                <div class="teal-input-bar">
+                    <button class="mic-button" id="mic-btn" onclick="toggleMic()" title="Tap to Speak">
+                        🎤
+                    </button>
+                    <input type="text" class="chat-input" id="chat-input" placeholder="Talk to ViG or type a command..." onkeydown="if(event.key==='Enter') sendUserText()">
+                    <button class="btn-send" onclick="sendUserText()">Send</button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 3. SETTINGS SCREEN -->
+        <div class="screen settings-screen" id="screen-settings">
+            <h2 style="color: var(--dark-espresso); font-size: 1.5rem; margin-top: 10px; font-weight: 800;">Preferences</h2>
+            
+            <div style="background: var(--dark-teal-surface); border: 2px solid var(--glowing-teal); border-radius: 24px; padding: 20px; color: #FFF;">
+                <label style="font-size: 0.75rem; font-weight: 800; color: var(--glowing-teal); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; display: block;">AI MODEL PROVIDER</label>
+                
+                <div class="provider-selector">
+                    <div class="provider-btn active" id="p-gemini" onclick="selectProvider('gemini')">Google Gemini</div>
+                    <div class="provider-btn" id="p-openai" onclick="selectProvider('openai')">OpenAI GPT-4o</div>
+                    <div class="provider-btn" id="p-claude" onclick="selectProvider('claude')">Claude 3.5</div>
+                </div>
+
+                <input type="password" class="text-field" id="api-key-input" placeholder="API Key...">
+                <div style="font-size: 0.75rem; color: var(--light-cream); opacity: 0.7; margin-top: 8px;" id="key-hint">Paste your Google Gemini API Key.</div>
+            </div>
+
+            <div style="background: var(--dark-teal-surface); border: 2px solid var(--glowing-teal); border-radius: 24px; padding: 20px; color: #FFF;">
+                <label style="font-size: 0.75rem; font-weight: 800; color: var(--glowing-teal); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; display: block;">REASONING ENGINE</label>
+                <div style="font-size: 0.85rem; color: var(--electric-teal); font-weight: 700;">⚡ Chain-of-Thought System Prompting: ACTIVE</div>
+                <div style="font-size: 0.75rem; color: var(--light-cream); opacity: 0.7; margin-top: 4px;">ViG performs step-by-step reasoning before generating articulate responses.</div>
+            </div>
+
+            <div style="background: var(--dark-teal-surface); border: 2px solid var(--glowing-teal); border-radius: 24px; padding: 20px; color: #FFF;">
+                <label style="font-size: 0.75rem; font-weight: 800; color: var(--glowing-teal); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; display: block;">VOICE RESPONSE</label>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-size: 0.88rem; color: var(--light-cream); font-weight: 700;">Spoken Voice Responses (TTS)</span>
+                    <input type="checkbox" id="tts-toggle" checked style="width: 18px; height: 18px; accent-color: var(--glowing-teal);">
+                </div>
+            </div>
+
+            <div style="display:flex; gap:12px; margin-top:10px;">
+                <button class="teal-chip" style="flex:1; text-align:center;" onclick="showScreen('home')">CANCEL</button>
+                <button class="teal-chip" style="flex:1; text-align:center; background: var(--dark-teal-surface); color: var(--glowing-teal); border-color: var(--glowing-teal);" onclick="saveSettings()">SAVE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+        <div class="tab-item active" id="tab-home" onclick="showScreen('home')">
+            <div class="tab-icon">🏠</div><span>Home</span>
+        </div>
+        <div class="tab-item" id="tab-agent" onclick="showScreen('agent')">
+            <div class="tab-icon">⚡</div><span>Agent</span>
+        </div>
+        <div class="tab-item" id="tab-settings" onclick="showScreen('settings')">
+            <div class="tab-icon">⚙️</div><span>Settings</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentScreen = 'home';
+    let isListening = false;
+    let isThinking = false;
+    let recognition = null;
+    let selectedProvider = localStorage.getItem('vig_provider') || 'gemini';
+
+    function selectProvider(prov) {
+        selectedProvider = prov;
+        document.querySelectorAll('.provider-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('p-' + prov).classList.add('active');
+        
+        const hint = document.getElementById('key-hint');
+        const input = document.getElementById('api-key-input');
+        if (prov === 'openai') {
+            hint.innerText = 'Paste your OpenAI API Key (sk-...)';
+            input.value = localStorage.getItem('vig_openai_key') || '';
+        } else if (prov === 'claude') {
+            hint.innerText = 'Paste your Anthropic Claude API Key (sk-ant-...)';
+            input.value = localStorage.getItem('vig_claude_key') || '';
+        } else {
+            hint.innerText = 'Paste your Google Gemini API Key (AIzaSy... or AQ.Ab8...)';
+            input.value = localStorage.getItem('vig_api_key') || '';
+        }
+    }
+
+    // Load persisted settings
+    selectProvider(selectedProvider);
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+        try {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = function() {
+                isListening = true;
+                setCoreState('Listening...', 'state-listening');
+                document.getElementById('mic-btn').classList.add('listening');
+                document.getElementById('chat-input').placeholder = "Listening to your voice...";
+            };
+
+            recognition.onresult = function(event) {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                document.getElementById('chat-input').value = transcript;
+            };
+
+            recognition.onerror = function(event) {
+                isListening = false;
+                document.getElementById('mic-btn').classList.remove('listening');
+                document.getElementById('chat-input').placeholder = "Talk to ViG or type a command...";
+                setCoreState('Ready', '');
+            };
+
+            recognition.onend = function() {
+                isListening = false;
+                document.getElementById('mic-btn').classList.remove('listening');
+                document.getElementById('chat-input').placeholder = "Talk to ViG or type a command...";
+                const cmd = document.getElementById('chat-input').value.trim();
+                if (cmd && !isThinking) {
+                    processCommand(cmd);
+                } else if (!isThinking) {
+                    setCoreState('Ready', '');
+                }
+            };
+        } catch (e) {}
+    }
+
+    function toggleMic() {
+        if (!recognition) {
+            const samplePrompt = prompt("Enter what you would like to say to ViG:", "Explain entropy in simple terms");
+            if (samplePrompt) processCommand(samplePrompt);
+            return;
+        }
+
+        if (isListening) {
+            recognition.stop();
+        } else {
+            window.speechSynthesis?.cancel();
+            document.getElementById('chat-input').value = '';
+            try { recognition.start(); } catch (err) { recognition.stop(); }
+        }
+    }
+
+    function startVoiceHome() {
+        showScreen('agent');
+        setTimeout(() => { toggleMic(); }, 300);
+    }
+
+    function speakCommandPreset(text) {
+        showScreen('agent');
+        processCommand(text);
+    }
+
+    function sendUserText() {
+        const input = document.getElementById('chat-input');
+        const cmd = input.value.trim();
+        if (!cmd || isThinking) return;
+        input.value = '';
+        processCommand(cmd);
+    }
+
+    function setCoreState(statusText, cssClass) {
+        document.getElementById('agent-status-text').innerText = statusText;
+        document.getElementById('core-wrap').className = 'core-display-area ' + (cssClass || '');
+    }
+
+    function appendUserBubble(text) {
+        const area = document.getElementById('conversation-area');
+        const bubble = document.createElement('div');
+        bubble.className = 'chat-bubble user';
+        bubble.innerText = text;
+        area.appendChild(bubble);
+        area.scrollTop = area.scrollHeight;
+    }
+
+    function appendAssistantBubble(text) {
+        const area = document.getElementById('conversation-area');
+        const bubble = document.createElement('div');
+        bubble.className = 'chat-bubble assistant';
+        bubble.innerHTML = text;
+        area.appendChild(bubble);
+        area.scrollTop = area.scrollHeight;
+    }
+
+    async function processCommand(cmd) {
+        if (isThinking) return;
+        isThinking = true;
+        window.speechSynthesis?.cancel();
+
+        appendUserBubble(cmd);
+        document.getElementById('chat-input').value = '';
+        setCoreState('Thinking (Chain of Thought)...', 'state-thinking');
+
+        const cotPrompt = `You are ViG (Your Personal Intelligence), an elite personal AI companion.
+        
+CHAIN-OF-THOUGHT SYSTEM INSTRUCTIONS:
+1. REASONING: Deconstruct the user's query step-by-step.
+2. STRUCTURE: Deliver a highly articulate, structured explanation using clear formatting and bold key terms.
+3. ELEGANCE: Maintain an intelligent, warm, conversational tone.
+
+User Query: "${cmd}"`;
+
+        try {
+            let text = "";
+
+            if (selectedProvider === 'openai') {
+                const openAiKey = localStorage.getItem('vig_openai_key') || '';
+                if (!openAiKey) throw new Error("OpenAI API key not set in Settings.");
+                
+                const res = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${openAiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: 'gpt-4o',
+                        messages: [{ role: 'user', content: cotPrompt }],
+                        temperature: 0.7
+                    })
+                });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error.message);
+                text = data.choices[0].message.content;
+
+            } else if (selectedProvider === 'claude') {
+                const claudeKey = localStorage.getItem('vig_claude_key') || '';
+                if (!claudeKey) throw new Error("Claude API key not set in Settings.");
+
+                const res = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': claudeKey,
+                        'anthropic-version': '2023-06-01'
+                    },
+                    body: JSON.stringify({
+                        model: 'claude-3-5-sonnet-20241022',
+                        max_tokens: 1024,
+                        messages: [{ role: 'user', content: cotPrompt }]
+                    })
+                });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error.message);
+                text = data.content[0].text;
+
+            } else {
+                // Gemini Default
+                const geminiKey = localStorage.getItem('vig_api_key') || '';
+                if (!geminiKey) {
+                    await new Promise(r => setTimeout(r, 600));
+                    text = `[Chain of Thought Reasoning]\n1. User Query: "${cmd}"\n2. Intent: High Intelligence Answer\n3. Result: ViG has analyzed your task. Connect an API key in Settings for live GPT-4o, Claude 3.5, or Gemini models!`;
+                } else {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: cotPrompt }] }],
+                            generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.error) throw new Error(data.error.message);
+                    text = data.candidates?.[0]?.content?.parts?.[0]?.text || "No response.";
+                }
+            }
+
+            isThinking = false;
+            appendAssistantBubble(text);
+            speakResponse(text);
+
+        } catch (err) {
+            isThinking = false;
+            setCoreState('Ready', '');
+            appendAssistantBubble('AI Provider Error: ' + err.message);
+        }
+    }
+
+    function speakResponse(text) {
+        const ttsEnabled = document.getElementById('tts-toggle').checked;
+        if (!ttsEnabled || !('speechSynthesis' in window)) {
+            setCoreState('Ready', '');
+            return;
+        }
+
+        window.speechSynthesis.cancel();
+        setCoreState('Speaking...', 'state-speaking');
+
+        const cleanText = text.replace(/[*_#[\]]/g, '').replace(/•/g, ' ');
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+
+        utterance.onend = () => { setCoreState('Ready', ''); };
+        utterance.onerror = () => { setCoreState('Ready', ''); };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+        
+        document.getElementById('screen-' + screenId).classList.add('active');
+        const tab = document.getElementById('tab-' + screenId);
+        if(tab) tab.classList.add('active');
+        currentScreen = screenId;
+
+        const headerBtn = document.getElementById('btn-header-action');
+        if (screenId === 'settings') {
+            headerBtn.innerText = 'Close'; headerBtn.onclick = () => showScreen('home');
+        } else {
+            headerBtn.innerText = 'Settings'; headerBtn.onclick = () => showScreen('settings');
+        }
+    }
+
+    function openAgent(prompt) {
+        showScreen('agent');
+        if (prompt) processCommand(prompt);
+    }
+
+    function saveSettings() {
+        const val = document.getElementById('api-key-input').value.trim();
+        localStorage.setItem('vig_provider', selectedProvider);
+        if (val) {
+            if (selectedProvider === 'openai') localStorage.setItem('vig_openai_key', val);
+            else if (selectedProvider === 'claude') localStorage.setItem('vig_claude_key', val);
+            else localStorage.setItem('vig_api_key', val);
+        }
+        alert('Settings saved!');
+        showScreen('home');
+    }
+</script>
+
+</body>
+</html>
