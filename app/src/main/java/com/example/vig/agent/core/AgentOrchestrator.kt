@@ -7,20 +7,19 @@ import com.example.vig.agent.manager.ConfirmationManager
 import com.example.vig.agent.manager.EmergencyLockManager
 import com.example.vig.agent.manager.PermissionManager
 import com.example.vig.agent.manager.RiskManager
-import com.example.vig.agent.planner.TaskPlanner
 import com.example.vig.agent.provider.MultiAIProvider
-import com.example.vig.agent.recovery.RecoveryAgent
-import com.example.vig.agent.verifier.ResultVerifier
 import com.example.vig.domain.interfaces.ToolRegistry
 import com.example.vig.domain.models.AgentState
 import com.example.vig.domain.models.AgentTask
-import com.example.vig.domain.models.StepStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 class AgentOrchestrator(
     val aiProvider: MultiAIProvider,
@@ -43,18 +42,19 @@ class AgentOrchestrator(
     val permissionManager = PermissionManager(androidContext)
     val riskManager = RiskManager()
     val confirmationManager = ConfirmationManager()
-    val recoveryAgent = RecoveryAgent(toolRegistry)
-    val resultVerifier = ResultVerifier()
     val contextManager = ConversationContextManager()
-    private val taskPlanner = TaskPlanner(toolRegistry)
 
     private val mutex = Mutex()
     private var currentJob: Job? = null
 
+    fun isAIConfigured(): Boolean {
+        return aiProvider.geminiProvider.keyStoreManager.isGeminiConfigured()
+    }
+
     fun cancel() {
         currentJob?.cancel()
         _state.value = AgentState.CANCELLED
-        addTimelineEntry("❌ Cancelled by user.")
+        addTimelineEntry("Cancelled by user.")
     }
 
     suspend fun confirmPending() {
@@ -64,157 +64,98 @@ class AgentOrchestrator(
     suspend fun denyPending() {
         confirmationManager.deny()
         _state.value = AgentState.CANCELLED
-        addTimelineEntry("❌ Action denied by user.")
+        addTimelineEntry("Action denied by user.")
     }
 
     suspend fun processCommand(command: String) = mutex.withLock {
         _timeline.value = emptyList()
         _agentResponse.value = ""
 
-        if (command.isBlank()) {
+        val trimmedCmd = command.trim()
+        if (trimmedCmd.isBlank()) {
             updateState(AgentState.FAILED, "Empty command.")
             return@withLock
         }
 
         if (EmergencyLockManager.isEmergencyLocked()) {
-            updateState(AgentState.FAILED, "🔒 Emergency Lock is ACTIVE. Autonomous actions are disabled in Security Settings.")
-            _agentResponse.value = "Emergency Lock is active. Tool execution is disabled."
+            updateState(AgentState.FAILED, "Emergency Lock is active.")
+            _agentResponse.value = "Emergency Lock is active. AI actions are temporarily disabled."
             return@withLock
         }
 
-        updateState(AgentState.LISTENING, "Command: '$command'")
-
-        // 1. UNDERSTANDING
-        updateState(AgentState.UNDERSTANDING, "Understanding user intent...")
-
-        // 2. ROUTING
-        updateState(AgentState.ROUTING, "Classifying task and routing to optimal model...")
-        val category = aiProvider.router.classifyCategory(command)
-        val selectedModel = aiProvider.router.selectModel(category)
-
-        // 3. PLANNING
-        updateState(AgentState.PLANNING, "Formulating execution plan...")
-        val task = taskPlanner.planTask(command, category)
-        task.selectedModel = selectedModel
-        _activeTask.value = task
-
-        if (task.steps.isEmpty()) {
-            // Direct knowledge/conversational answer
-            executeDirectKnowledge(command, task)
+        // Check if Gemini or active provider is configured
+        if (!isAIConfigured()) {
+            updateState(AgentState.FAILED, "Gemini is not connected.")
+            _agentResponse.value = "Gemini is not connected. Open Settings to connect it."
             return@withLock
         }
 
-        addTimelineEntry("📋 Generated ${task.steps.size} step plan:")
-        task.steps.forEachIndexed { i, step ->
-            addTimelineEntry("  ${i + 1}. ${step.description} (${step.toolName})")
+        updateState(AgentState.LISTENING, "Sending...")
+
+        // Handle direct greetings without unnecessary API latency
+        val lower = trimmedCmd.lowercase()
+        if (lower.matches(Regex("""^(hi|hello|hey|greetings|hola)\s*(vig|vig-ai)?[\.!\?]*$"""))) {
+            updateState(AgentState.UNDERSTANDING, "Thinking...")
+            delay(250)
+            val greeting = "Hello! I'm ViG, your personal intelligence. How can I help?"
+            _agentResponse.value = greeting
+            contextManager.addTurn(trimmedCmd, greeting)
+            updateState(AgentState.COMPLETED, "Ready")
+            return@withLock
         }
 
-        // 4. STEP-BY-STEP EXECUTION & VERIFICATION
-        val stepOutputs = mutableListOf<String>()
-
-        for ((index, step) in task.steps.withIndex()) {
-            task.currentStepIndex = index
-            val tool = toolRegistry.getTool(step.toolName)
-
-            if (tool == null) {
-                step.status = StepStatus.FAILED
-                addTimelineEntry("⚠️ Tool '${step.toolName}' is not registered.")
-                continue
-            }
-
-            // Capability & Permission Check
-            val missingPerms = permissionManager.checkToolPermissions(tool)
-            if (missingPerms.isNotEmpty()) {
-                updateState(AgentState.WAITING_FOR_PERMISSION, "Permission required for ${tool.name}: ${missingPerms.joinToString()}")
-                step.status = StepStatus.FAILED
-                continue
-            }
-
-            // Risk Assessment & Confirmation
-            val risk = riskManager.assessRisk(tool)
-            if (step.requiresConfirmation || riskManager.requiresConfirmation(risk)) {
-                updateState(
-                    AgentState.WAITING_FOR_CONFIRMATION,
-                    "⚠️ ${tool.name} requires user confirmation (${risk} risk)."
-                )
-
-                var confirmed = false
-                confirmationManager.requestConfirmation(
-                    title = "Confirm ${tool.name}",
-                    description = "ViG is requesting to run ${tool.name} with input: ${step.arguments}",
-                    riskLevel = risk,
-                    toolName = tool.name,
-                    onConfirm = { confirmed = true },
-                    onDeny = { confirmed = false }
-                )
-
-                // For test/balanced automation where automated confirmation is not pending in UI loop
-                // The UI displays ConfirmationCard when state == WAITING_FOR_CONFIRMATION
-            }
-
-            // EXECUTE STEP
-            updateState(AgentState.EXECUTING, "Executing step ${index + 1}: ${step.description}...")
-            step.status = StepStatus.RUNNING
-
-            val inputArg = step.arguments.values.firstOrNull() ?: command
-            var result = tool.execute(inputArg, androidContext)
-
-            // VERIFY STEP
-            updateState(AgentState.VERIFYING, "Verifying result of ${tool.name}...")
-            val isVerified = resultVerifier.verify(tool, result, androidContext)
-
-            if (!isVerified) {
-                // RECOVERY AGENT
-                updateState(AgentState.RECOVERING, "Attempting recovery for ${tool.name}...")
-                val recoveryPlan = recoveryAgent.determineRecovery(tool.name, inputArg, result.error)
-                if (recoveryPlan != null) {
-                    addTimelineEntry("🔄 Recovery Strategy: ${recoveryPlan.explanation}")
-                    result = recoveryAgent.attemptRecovery(recoveryPlan, androidContext)
+        // Device tool safety: if user says "open youtube", "open app"
+        if (lower.startsWith("open ") || lower.startsWith("launch ")) {
+            val appTarget = lower.replace("open ", "").replace("launch ", "").trim()
+            val tool = toolRegistry.getTool("OpenApp")
+            if (tool != null && androidContext != null) {
+                updateState(AgentState.EXECUTING, "Opening $appTarget...")
+                val res = tool.execute(appTarget, androidContext)
+                if (res.success) {
+                    _agentResponse.value = res.message
+                    contextManager.addTurn(trimmedCmd, res.message)
+                    updateState(AgentState.COMPLETED, "Ready")
+                } else {
+                    val msg = "I can't control that app yet."
+                    _agentResponse.value = msg
+                    contextManager.addTurn(trimmedCmd, msg)
+                    updateState(AgentState.COMPLETED, "Ready")
                 }
-            }
-
-            if (result.success) {
-                step.status = StepStatus.COMPLETED
-                step.output = result.message
-                stepOutputs.add(result.message)
-                addTimelineEntry("✓ Completed: ${step.description}")
+                return@withLock
             } else {
-                step.status = StepStatus.FAILED
-                step.output = result.message
-                addTimelineEntry("❌ Failed: ${step.description} (${result.message})")
+                val msg = "I can't control that app yet."
+                _agentResponse.value = msg
+                contextManager.addTurn(trimmedCmd, msg)
+                updateState(AgentState.COMPLETED, "Ready")
+                return@withLock
             }
         }
 
-        // Final Response Synthesis
-        val finalSynthesized = if (stepOutputs.isNotEmpty()) {
-            "Done. " + stepOutputs.joinToString("\n\n")
-        } else {
-            "Task executed. Please review timeline."
-        }
+        // Call Gemini for real AI answering with conversational continuity
+        updateState(AgentState.UNDERSTANDING, "Thinking...")
 
-        _agentResponse.value = finalSynthesized
-        contextManager.addTurn(command, finalSynthesized)
-        updateState(AgentState.COMPLETED, "Autonomous execution finished.")
-    }
-
-    private suspend fun executeDirectKnowledge(command: String, task: AgentTask) {
-        updateState(AgentState.PLANNING, "Synthesizing answer with ${task.selectedModel}...")
-        val contextPrompt = contextManager.getFormattedContext()
+        val contextHistory = contextManager.getFormattedContext()
         val fullPrompt = buildString {
-            if (contextPrompt.isNotBlank()) appendLine(contextPrompt)
-            appendLine("User Query: '$command'")
-            appendLine("Instructions: Provide an articulate, highly informative, structured explanation with key concepts and real-world clarity.")
+            if (contextHistory.isNotBlank()) {
+                appendLine(contextHistory)
+            }
+            appendLine("User Question:")
+            appendLine(trimmedCmd)
         }
+
+        updateState(AgentState.PLANNING, "Responding...")
 
         val result = aiProvider.generateResponse(fullPrompt)
         result.fold(
             onSuccess = { answer ->
                 _agentResponse.value = answer
-                contextManager.addTurn(command, answer)
-                updateState(AgentState.COMPLETED, "Done.")
+                contextManager.addTurn(trimmedCmd, answer)
+                updateState(AgentState.COMPLETED, "Ready")
             },
-            onFailure = { err ->
-                updateState(AgentState.FAILED, "Error: ${err.message}")
+            onFailure = { error ->
+                val errorMsg = error.message ?: "Something went wrong while contacting Gemini."
+                _agentResponse.value = errorMsg
+                updateState(AgentState.FAILED, errorMsg)
             }
         )
     }

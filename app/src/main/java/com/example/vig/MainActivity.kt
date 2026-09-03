@@ -77,7 +77,11 @@ fun VigApp(keyStoreManager: KeyStoreManager, orchestrator: AgentOrchestrator, vo
             )
         }
         composable("agent") {
-            AgentScreen(orchestrator, voiceManager)
+            AgentScreen(
+                orchestrator = orchestrator,
+                voiceManager = voiceManager,
+                onNavigateToSettings = { navController.navigate("settings") }
+            )
         }
         composable("settings") {
             SettingsScreen(

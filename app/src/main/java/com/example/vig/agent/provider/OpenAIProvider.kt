@@ -19,21 +19,17 @@ class OpenAIProvider(private val keyStoreManager: KeyStoreManager) : AIProvider 
         .build()
 
     override suspend fun isConfigured(): Boolean {
-        return !keyStoreManager.getApiKey().isNullOrBlank()
+        return keyStoreManager.isOpenAIConfigured()
     }
 
     override suspend fun generateResponse(prompt: String): Result<String> = withContext(Dispatchers.IO) {
-        val apiKey = keyStoreManager.getApiKey()
+        val apiKey = keyStoreManager.getOpenAIKey()
             ?: return@withContext Result.failure(IllegalStateException("OpenAI API key not configured."))
 
         try {
             val systemPrompt = """
-                You are ViG (Your Personal Intelligence), an elite personal AI agent powered by GPT-4o.
-                
-                CHAIN-OF-THOUGHT SYSTEM INSTRUCTIONS:
-                1. REASONING: Analyze the user's intent, context, and requirements step-by-step.
-                2. STRUCTURE: Provide an articulate, highly structured explanation with key concepts and bold formatting.
-                3. ELEGANCE: Maintain an intelligent, warm, personal companion tone.
+                You are ViG, a helpful personal AI assistant.
+                Answer questions clearly, be concise for simple questions, explain complex topics step-by-step.
             """.trimIndent()
 
             val jsonBody = JSONObject().apply {
@@ -54,7 +50,7 @@ class OpenAIProvider(private val keyStoreManager: KeyStoreManager) : AIProvider 
 
             val request = Request.Builder()
                 .url("https://api.openai.com/v1/chat/completions")
-                .addHeader("Authorization", "Bearer ")
+                .addHeader("Authorization", "Bearer $apiKey")
                 .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
                 .build()
 
@@ -62,7 +58,7 @@ class OpenAIProvider(private val keyStoreManager: KeyStoreManager) : AIProvider 
             val bodyStr = response.body?.string() ?: ""
             
             if (!response.isSuccessful) {
-                return@withContext Result.failure(IllegalStateException("OpenAI API Error (): "))
+                return@withContext Result.failure(IllegalStateException("OpenAI API Error (${response.code}): $bodyStr"))
             }
 
             val jsonResponse = JSONObject(bodyStr)
