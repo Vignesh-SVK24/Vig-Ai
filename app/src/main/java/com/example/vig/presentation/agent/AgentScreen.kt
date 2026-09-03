@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.vig.agent.core.AgentOrchestrator
+import com.example.vig.agent.manager.EmergencyLockManager
 import com.example.vig.domain.models.AgentState
 import com.example.vig.domain.models.VoiceState
 import com.example.vig.presentation.theme.*
@@ -35,12 +36,16 @@ data class MessageBubble(val text: String, val isUser: Boolean)
 fun AgentScreen(orchestrator: AgentOrchestrator, voiceManager: VoiceManager) {
     val state by orchestrator.state.collectAsState()
     val agentResponse by orchestrator.agentResponse.collectAsState()
+    val timeline by orchestrator.timeline.collectAsState()
+    val activeTask by orchestrator.activeTask.collectAsState()
     val voiceState by voiceManager.voiceState.collectAsState()
     val sttTranscription by voiceManager.transcription.collectAsState()
+    val pendingConfirmation by orchestrator.confirmationManager.pendingConfirmation.collectAsState()
+    val isEmergencyLocked by EmergencyLockManager.isLocked.collectAsState()
 
     val scope = rememberCoroutineScope()
     var input by remember { mutableStateOf("") }
-    val messages = remember { mutableStateListOf(MessageBubble("Hello Vignesh. Tap the microphone or speak a command and I'll take care of it.", false)) }
+    val messages = remember { mutableStateListOf(MessageBubble("Hello Vignesh. ViG is ready for your autonomous commands.", false)) }
     val listState = rememberLazyListState()
 
     val isProcessing = state != AgentState.IDLE && state != AgentState.COMPLETED &&
@@ -65,14 +70,37 @@ fun AgentScreen(orchestrator: AgentOrchestrator, voiceManager: VoiceManager) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().background(WarmBeige).padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(WarmBeige)
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // EMERGENCY LOCK BANNER
+        if (isEmergencyLocked) {
+            Surface(
+                color = MutedRed,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+            ) {
+                Text(
+                    text = "🔒 EMERGENCY LOCK ACTIVE — Tool executions disabled",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+        }
 
         // VIG GLOWING TEAL AI CORE HEADER
         Box(
-            modifier = Modifier.fillMaxWidth().tealBeigeCard(elevation = 10.dp, cornerRadius = 28.dp, containerColor = DarkTealSurface).padding(20.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .tealBeigeCard(elevation = 10.dp, cornerRadius = 28.dp, containerColor = DarkTealSurface)
+                .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -84,36 +112,146 @@ fun AgentScreen(orchestrator: AgentOrchestrator, voiceManager: VoiceManager) {
                 }
                 ViGCore(state = displayState)
                 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 
-                val statusText = when {
-                    voiceState == VoiceState.LISTENING -> "Listening to you..."
-                    voiceState == VoiceState.SPEAKING -> "Speaking..."
-                    state == AgentState.UNDERSTANDING || state == AgentState.PLANNING -> "Thinking..."
-                    state == AgentState.EXECUTING -> "Working..."
-                    else -> "Ready"
+                val statusText = when (state) {
+                    AgentState.IDLE -> if (voiceState == VoiceState.LISTENING) "Listening..." else "Ready"
+                    AgentState.LISTENING -> "Listening..."
+                    AgentState.UNDERSTANDING -> "Understanding Intent..."
+                    AgentState.ROUTING -> "Routing to Model..."
+                    AgentState.PLANNING -> "Formulating Plan..."
+                    AgentState.WAITING_FOR_PERMISSION -> "Waiting for Permission..."
+                    AgentState.WAITING_FOR_CONFIRMATION -> "Awaiting Approval..."
+                    AgentState.EXECUTING -> "Executing Tools..."
+                    AgentState.VERIFYING -> "Verifying Result..."
+                    AgentState.RECOVERING -> "Recovering with Alternative..."
+                    AgentState.SPEAKING -> "Speaking Response..."
+                    AgentState.COMPLETED -> "Task Completed ✓"
+                    AgentState.FAILED -> "Action Failed"
+                    AgentState.CANCELLED -> "Cancelled by User"
+                    else -> state.name
                 }
                 
-                Text(
-                    text = statusText,
-                    color = GlowingTeal,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = statusText,
+                        color = if (state == AgentState.FAILED) MutedRed else GlowingTeal,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                    if (isProcessing) {
+                        Surface(
+                            color = MutedRed.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.clickable { orchestrator.cancel() }
+                        ) {
+                            Text(
+                                text = "Cancel",
+                                color = MutedRed,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        // CONFIRMATION DIALOG / CARD IF PENDING
+        pendingConfirmation?.let { conf ->
+            Spacer(modifier = Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .tealBeigeCard(elevation = 12.dp, cornerRadius = 20.dp, containerColor = LightCream)
+                    .padding(14.dp)
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "⚠️ USER CONFIRMATION REQUIRED",
+                            color = MutedRed,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "${conf.riskLevel} RISK",
+                            color = DarkEspresso,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = conf.title, color = DarkEspresso, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(text = conf.description, color = WarmBrown, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = { scope.launch { orchestrator.denyPending() } },
+                            colors = ButtonDefaults.buttonColors(containerColor = SoftSand),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Reject", color = DarkEspresso, fontWeight = FontWeight.Bold)
+                        }
+                        Button(
+                            onClick = { scope.launch { orchestrator.confirmPending() } },
+                            colors = ButtonDefaults.buttonColors(containerColor = MutedRed),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Approve", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
 
-        // CLEAN CHAT CONVERSATION AREA
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // CHAT CONVERSATION & TIMELINE DISPLAY
         Box(
-            modifier = Modifier.weight(1f).fillMaxWidth().tealBeigeCard(elevation = 6.dp, cornerRadius = 24.dp, containerColor = LightCream).padding(12.dp)
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .tealBeigeCard(elevation = 6.dp, cornerRadius = 24.dp, containerColor = LightCream)
+                .padding(12.dp)
         ) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // Multi-step Execution Timeline (if active or recently populated)
+                if (timeline.isNotEmpty()) {
+                    item {
+                        Surface(
+                            color = DarkTealBase.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = "⚡ AGENT EXECUTION TIMELINE",
+                                    color = DarkTealSurface,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 11.sp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                timeline.forEach { entry ->
+                                    Text(
+                                        text = entry,
+                                        color = DarkEspresso,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        lineHeight = 17.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 items(messages) { msg ->
                     Box(
                         modifier = Modifier.fillMaxWidth(),
@@ -127,10 +265,10 @@ fun AgentScreen(orchestrator: AgentOrchestrator, voiceManager: VoiceManager) {
                             Text(
                                 text = msg.text,
                                 color = if (msg.isUser) GlowingTeal else DarkEspresso,
-                                fontSize = 14.sp,
-                                lineHeight = 20.sp,
+                                fontSize = 13.sp,
+                                lineHeight = 19.sp,
                                 fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(14.dp)
+                                modifier = Modifier.padding(12.dp)
                             )
                         }
                     }
@@ -138,18 +276,23 @@ fun AgentScreen(orchestrator: AgentOrchestrator, voiceManager: VoiceManager) {
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // TEAL & BEIGE INPUT CONTROLS
-        Box(modifier = Modifier.fillMaxWidth().tealBeigeCard(elevation = 8.dp, cornerRadius = 24.dp, containerColor = LightCream).padding(12.dp)) {
+        // INPUT & VOICE CONTROLS
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .tealBeigeCard(elevation = 8.dp, cornerRadius = 24.dp, containerColor = LightCream)
+                .padding(10.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                // Glowing Mic Button
+                // Mic Button
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(48.dp)
                         .tealGlowingButton(
                             isPressed = voiceState == VoiceState.LISTENING,
-                            cornerRadius = 26.dp,
+                            cornerRadius = 24.dp,
                             color = if (voiceState == VoiceState.LISTENING) MutedRed else DarkTealSurface
                         )
                         .pointerInput(Unit) {
@@ -167,15 +310,15 @@ fun AgentScreen(orchestrator: AgentOrchestrator, voiceManager: VoiceManager) {
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("??", fontSize = 24.sp)
+                    Text("🎤", fontSize = 22.sp)
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
                 OutlinedTextField(
                     value = input,
                     onValueChange = { input = it },
-                    placeholder = { Text("Speak or type a command...", fontSize = 13.sp, color = WarmBrown) },
+                    placeholder = { Text("Command ViG...", fontSize = 13.sp, color = WarmBrown) },
                     modifier = Modifier.weight(1f).background(SoftSand, RoundedCornerShape(16.dp)),
                     enabled = !isProcessing,
                     singleLine = true,
@@ -189,11 +332,11 @@ fun AgentScreen(orchestrator: AgentOrchestrator, voiceManager: VoiceManager) {
                     )
                 )
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Box(
                     modifier = Modifier
-                        .height(48.dp)
+                        .height(46.dp)
                         .tealGlowingButton(isPressed = isProcessing || input.isBlank(), color = DarkTealSurface)
                         .clickable(enabled = !isProcessing && input.isNotBlank()) {
                             val cmd = input.trim()
@@ -205,7 +348,7 @@ fun AgentScreen(orchestrator: AgentOrchestrator, voiceManager: VoiceManager) {
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Send", color = GlowingTeal, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 14.dp))
+                    Text("Act", color = GlowingTeal, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 14.dp))
                 }
             }
         }

@@ -3,12 +3,16 @@ package com.example.vig.domain.models
 enum class AgentState {
     IDLE,
     LISTENING,
+    TRANSCRIBING,
     UNDERSTANDING,
+    ROUTING,
     PLANNING,
     WAITING_FOR_PERMISSION,
     WAITING_FOR_CONFIRMATION,
     EXECUTING,
     VERIFYING,
+    RECOVERING,
+    SPEAKING,
     COMPLETED,
     FAILED,
     CANCELLED

@@ -1,26 +1,28 @@
 package com.example.vig.agent.provider
 
 import com.example.vig.domain.interfaces.AIProvider
+import com.example.vig.domain.router.ModelRouter
 import com.example.vig.security.KeyStoreManager
 
 class MultiAIProvider(private val keyStoreManager: KeyStoreManager) : AIProvider {
-    private val geminiProvider = GeminiProvider(keyStoreManager)
-    private val openAIProvider = OpenAIProvider(keyStoreManager)
-    private val claudeProvider = ClaudeProvider(keyStoreManager)
+    val geminiProvider = GeminiProvider(keyStoreManager)
+    val openAIProvider = OpenAIProvider(keyStoreManager)
+    val claudeProvider = ClaudeProvider(keyStoreManager)
+
+    val router = ModelRouter(
+        keyStoreManager = keyStoreManager,
+        geminiProvider = geminiProvider,
+        openAIProvider = openAIProvider,
+        claudeProvider = claudeProvider
+    )
 
     override suspend fun isConfigured(): Boolean {
-        return when (keyStoreManager.getProvider()) {
-            "openai" -> openAIProvider.isConfigured()
-            "claude" -> claudeProvider.isConfigured()
-            else -> geminiProvider.isConfigured()
-        }
+        return geminiProvider.isConfigured() || openAIProvider.isConfigured() || claudeProvider.isConfigured()
     }
 
     override suspend fun generateResponse(prompt: String): Result<String> {
-        return when (keyStoreManager.getProvider()) {
-            "openai" -> openAIProvider.generateResponse(prompt)
-            "claude" -> claudeProvider.generateResponse(prompt)
-            else -> geminiProvider.generateResponse(prompt)
-        }
+        val category = router.classifyCategory(prompt)
+        val selectedModel = router.selectModel(category)
+        return router.executeWithFallback(prompt, selectedModel).map { it.first }
     }
 }

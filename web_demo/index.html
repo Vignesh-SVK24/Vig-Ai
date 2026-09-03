@@ -672,9 +672,46 @@
         const area = document.getElementById('conversation-area');
         const bubble = document.createElement('div');
         bubble.className = 'chat-bubble assistant';
-        bubble.innerHTML = text;
+        bubble.innerHTML = text.replace(/\n/g, '<br>');
         area.appendChild(bubble);
         area.scrollTop = area.scrollHeight;
+    }
+
+    function appendTimelineBubble(steps) {
+        const area = document.getElementById('conversation-area');
+        const box = document.createElement('div');
+        box.style.cssText = 'background: rgba(13, 56, 52, 0.12); border: 1.5px solid var(--dark-teal-surface); border-radius: 18px; padding: 12px 16px; margin: 8px 0; font-size: 0.8rem; color: var(--dark-espresso);';
+        let html = '<div style="font-weight: 800; color: var(--dark-teal-surface); margin-bottom: 6px; letter-spacing: 0.5px;">⚡ AGENT EXECUTION TIMELINE</div>';
+        steps.forEach(s => {
+            html += `<div style="margin: 3px 0; font-weight: 500;">${s}</div>`;
+        });
+        box.innerHTML = html;
+        area.appendChild(box);
+        area.scrollTop = area.scrollHeight;
+    }
+
+    function appendConfirmationCard(title, desc, onApprove, onDeny) {
+        const area = document.getElementById('conversation-area');
+        const card = document.createElement('div');
+        card.id = 'active-confirmation-card';
+        card.style.cssText = 'background: var(--light-cream); border: 2px solid var(--muted-red); border-radius: 20px; padding: 14px; margin: 10px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.08);';
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-weight: 800; font-size: 0.75rem; color: var(--muted-red); letter-spacing: 1px;">⚠️ USER CONFIRMATION REQUIRED</span>
+                <span style="font-weight: 700; font-size: 0.7rem; color: var(--dark-espresso); background: var(--soft-sand); padding: 2px 6px; border-radius: 6px;">HIGH RISK</span>
+            </div>
+            <div style="font-weight: 700; font-size: 0.9rem; color: var(--dark-espresso);">${title}</div>
+            <div style="font-size: 0.8rem; color: var(--warm-brown); margin: 4px 0 12px;">${desc}</div>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-conf-reject" style="flex: 1; padding: 8px; border-radius: 10px; background: var(--soft-sand); border: none; font-weight: 700; color: var(--dark-espresso); cursor: pointer;">Reject</button>
+                <button id="btn-conf-approve" style="flex: 1; padding: 8px; border-radius: 10px; background: var(--muted-red); border: none; font-weight: 700; color: #FFF; cursor: pointer;">Approve</button>
+            </div>
+        `;
+        area.appendChild(card);
+        area.scrollTop = area.scrollHeight;
+
+        card.querySelector('#btn-conf-reject').onclick = () => { card.remove(); onDeny(); };
+        card.querySelector('#btn-conf-approve').onclick = () => { card.remove(); onApprove(); };
     }
 
     async function processCommand(cmd) {
